@@ -1,0 +1,57 @@
+{
+  "name": "lingvist-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lingvist 桌面版（Windows）— 直接加载 lingvist.com 官方网页的 Electron 外壳",
+  "author": "大王甜",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "start:safe": "electron --no-sandbox --in-process-gpu --disable-gpu-sandbox .",
+    "dist": "electron-builder --win --x64",
+    "dist:dir": "electron-builder --win --dir",
+    "dist:portable": "electron-builder --win portable --x64"
+  },
+  "devDependencies": {
+    "electron": "^38.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.local.lingvistdesktop",
+    "productName": "Lingvist Desktop",
+    "copyright": "Lingvist 内容与商标归 Lingvist 官方所有",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "assets/icon.ico",
+      "defaultArch": "x64",
+      "electronLanguages": [
+        "zh-CN",
+        "en-US"
+      ],
+      "compression": "maximum"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Lingvist Desktop"
+    },
+    "portable": {
+      "artifactName": "Lingvist-Desktop-${version}-portable.exe"
+    }
+  }
+}

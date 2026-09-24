@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>设置</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        color: #1f2430;
+        background: #ffffff;
+        user-select: none;
+      }
+      .titlebar {
+        height: 34px;
+        display: flex;
+        align-items: center;
+        padding: 0 8px 0 14px;
+        background: #f2f4f8;
+        border-bottom: 1px solid #e4e7ec;
+        -webkit-app-region: drag;
+      }
+      .titlebar span { font-size: 13px; font-weight: 500; }
+      .titlebar button {
+        margin-left: auto;
+        width: 30px; height: 26px;
+        border: 0; border-radius: 5px;
+        background: transparent;
+        font-size: 15px; color: #5c6376;
+        cursor: pointer;
+        -webkit-app-region: no-drag;
+      }
+      .titlebar button:hover { background: #e81123; color: #fff; }
+      .content { padding: 18px 20px 22px; }
+      h2 { font-size: 13px; font-weight: 500; color: #6b7280; margin: 0 0 12px; }
+      section { margin-bottom: 26px; }
+      .row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+      .row > span { width: 74px; color: #5c6376; }
+      input[type="range"] { flex: 1; accent-color: #2f6df6; }
+      .val { width: 46px; text-align: right; font-variant-numeric: tabular-nums; }
+      .presets { display: flex; gap: 8px; margin: 0 0 16px 84px; }
+      .key-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+      .key-row > span { width: 120px; color: #5c6376; }
+      input[type="text"] {
+        flex: 1; height: 28px; padding: 0 10px;
+        border: 1px solid #d8dce3; border-radius: 6px;
+        background: #fff; color: #1f2430; font: inherit;
+        font-family: ui-monospace, Consolas, monospace;
+      }
+      input[type="text"]:focus { outline: none; border-color: #2f6df6; }
+      input.failed { border-color: #e24b4a; color: #a32d2d; }
+      button.small {
+        height: 28px; padding: 0 12px;
+        border: 1px solid #d8dce3; border-radius: 6px;
+        background: #fff; font: inherit; color: #1f2430; cursor: pointer;
+      }
+      button.small:hover { background: #f2f4f8; }
+      .hint { color: #8a90a0; line-height: 1.6; margin: 10px 0 0; }
+      .status { min-height: 18px; color: #a32d2d; margin: 6px 0 0; }
+      .ok { color: #3b6d11; }
+      .actions { display: flex; gap: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="titlebar">
+      <span>设置</span>
+      <button id="close" title="关闭">×</button>
+    </div>
+
+    <div class="content">
+      <section>
+        <h2>窗口</h2>
+        <div class="row">
+          <span>不透明度</span>
+          <input type="range" id="opacity" min="30" max="100" step="5" />
+          <b class="val" id="opacityVal">100%</b>
+        </div>
+        <div class="presets" id="presets"></div>
+        <label class="row">
+          <span>置顶显示</span>
+          <input type="checkbox" id="alwaysOnTop" />
+        </label>
+      </section>
+
+      <section>
+        <h2>快捷键</h2>
+        <div id="keys"></div>
+        <p class="hint">
+          点输入框后直接按想要的组合键（例如 Ctrl+Shift+H）；按 Esc 取消修改，点「清除」禁用该快捷键。<br />
+          注册失败的会标红——换个组合键即可。
+        </p>
+      </section>
+
+      <div class="actions">
+        <button class="small" id="reset">恢复默认设置</button>
+      </div>
+      <p class="status" id="status"></p>
+    </div>
+
+    <script>
+      const api = window.lingvistDesktop;
+      const ACTIONS = [
+        ['toggleWindow', '显示 / 隐藏窗口'],
+        ['toggleTop', '开关置顶'],
+        ['opacityDown', '透明度 减'],
+        ['opacityUp', '透明度 加'],
+        ['openSettings', '打开设置'],
+      ];
+
+      const el = (id) => document.getElementById(id);
+      let state = null;
+
+      function comboFromEvent(e) {
+        const mods = [];
+        if (e.ctrlKey) mods.push('Control');
+        if (e.altKey) mods.push('Alt');
+        if (e.shiftKey) mods.push('Shift');
+        if (e.metaKey) mods.push('Super');
+        const k = e.key;
+        if (['Control', 'Shift', 'Alt', 'Meta'].includes(k)) return null;
+        let key = k;
+        if (k === ' ') key = 'Space';
+        else if (k.startsWith('Arrow')) key = k.slice(5);
+        else if (k.length === 1) key = k.toUpperCase();
+        return [...mods, key].join('+');
+      }
+
+      function setStatus(text, ok) {
+        const node = el('status');
+        node.textContent = text || '';
+        node.className = ok ? 'status ok' : 'status';
+      }
+
+      function renderKeys() {
+        const box = el('keys');
+        box.innerHTML = '';
+        for (const [action, label] of ACTIONS) {
+          const row = document.createElement('div');
+          row.className = 'key-row';
+
+          const name = document.createElement('span');
+          name.textContent = label;
+
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.readOnly = true;
+          input.value = state.shortcuts[action] || '';
+          input.placeholder = '未设置';
+          const saved = state.registered && state.registered[action];
+          if (input.value && saved !== input.value) input.classList.add('failed');
+
+          input.addEventListener('focus', () => setStatus('按下新的组合键…'));
+          input.addEventListener('keydown', async (e) => {
+            e.preventDefault();
+            if (e.key === 'Escape') {
+              input.blur();
+              setStatus('');
+              return;
+            }
+            const combo = comboFromEvent(e);
+            if (!combo) return;
+            const res = await api.settings.save({ shortcuts: { [action]: combo } });
+            state = await api.settings.get();
+            if (res.registered[action] === combo) {
+              input.value = combo;
+              input.classList.remove('failed');
+              setStatus('已生效：' + combo, true);
+            } else {
+              input.value = combo;
+              input.classList.add('failed');
+              setStatus('这个组合键系统不让用，换一个（比如把 Shift 去掉）');
+            }
+            input.blur();
+          });
+
+          const clear = document.createElement('button');
+          clear.className = 'small';
+          clear.textContent = '清除';
+          clear.addEventListener('click', async () => {
+            await api.settings.save({ shortcuts: { [action]: '' } });
+            state = await api.settings.get();
+            input.value = '';
+            input.classList.remove('failed');
+            setStatus('已禁用：' + label);
+          });
+
+          row.append(name, input, clear);
+          box.append(row);
+        }
+      }
+
+      function renderWindow() {
+        el('opacity').value = Math.round(state.opacity * 100);
+        el('opacityVal').textContent = Math.round(state.opacity * 100) + '%';
+        el('alwaysOnTop').checked = !!state.alwaysOnTop;
+
+        const presets = el('presets');
+        presets.innerHTML = '';
+        for (const v of [100, 80, 60, 40]) {
+          const b = document.createElement('button');
+          b.className = 'small';
+          b.textContent = v + '%';
+          b.addEventListener('click', async () => {
+            await api.settings.save({ opacity: v / 100 });
+            state = await api.settings.get();
+            renderWindow();
+          });
+          presets.append(b);
+        }
+      }
+
+      el('opacity').addEventListener('input', async (e) => {
+        const v = Number(e.target.value);
+        el('opacityVal').textContent = v + '%';
+        await api.settings.save({ opacity: v / 100 });
+      });
+
+      el('alwaysOnTop').addEventListener('change', async (e) => {
+        await api.settings.save({ alwaysOnTop: e.target.checked });
+      });
+
+      el('reset').addEventListener('click', async () => {
+        await api.settings.reset();
+        state = await api.settings.get();
+        renderWindow();
+        renderKeys();
+        setStatus('已恢复默认设置', true);
+      });
+
+      el('close').addEventListener('click', () => api.settings.close());
+
+      (async () => {
+        state = await api.settings.get();
+        renderWindow();
+        renderKeys();
+      })();
+    </script>
+  </body>
+</html>
